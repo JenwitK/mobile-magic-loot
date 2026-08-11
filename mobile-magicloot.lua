@@ -845,7 +845,7 @@ teleportFarmToggle = DungeonTab:CreateToggle({
 
 DungeonTab:CreateSlider({
     Name = "ความสูงที่ลอยเหนือมอน",
-    Range = { 4, 25 },
+    Range = { 4, 150 },
     Increment = 1,
     CurrentValue = 10,
     Flag = "HoverHeight",
