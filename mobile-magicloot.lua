@@ -433,27 +433,57 @@ end)
 -- Auto Claim Online Reward
 --============================================================
 
+local function claimOnlineRewards(verbose)
+    local function log(msg)
+        if verbose then debugLog(msg) end
+    end
+
+    local okList, list = pcall(CfgFind.GetOnlineAwardList)
+    if not okList then
+        log("claimOnlineRewards: GetOnlineAwardList errored: " .. tostring(list))
+        return 0
+    end
+    if type(list) ~= "table" then
+        log("claimOnlineRewards: award list is not a table (got " .. type(list) .. ")")
+        return 0
+    end
+
+    local okBox, onlineBox = pcall(PlayerData.GetPlrDataByKey, LocalPlayer, "OnlineBox")
+    if not okBox then
+        log("claimOnlineRewards: GetPlrDataByKey(OnlineBox) errored: " .. tostring(onlineBox))
+        onlineBox = nil
+    end
+    log(string.format("claimOnlineRewards: %d tiers total, OnlineSeconds=%s",
+        #list, tostring(onlineBox and onlineBox.OnlineSeconds)))
+
+    local attempted, claimed = 0, 0
+    for _, award in ipairs(list) do
+        local claimable = true
+        if onlineBox then
+            local okCheck, res = pcall(CfgFind.IsOnlineTierClaimable, onlineBox, award)
+            if okCheck then claimable = res end
+        end
+        if claimable then
+            attempted = attempted + 1
+            local ok, result = pcall(function()
+                return NetWork.InvokeServer(NetMsg.CLAIM_ONLINE_AWARD, award.id)
+            end)
+            log(string.format("claimOnlineRewards: tier id=%s ok=%s result=%s",
+                tostring(award.id), tostring(ok), tostring(result)))
+            if ok and result then claimed = claimed + 1 end
+        end
+    end
+    log(string.format("claimOnlineRewards: %d/%d tiers looked claimable, %d actually claimed",
+        attempted, #list, claimed))
+    return claimed
+end
+
 task.spawn(function()
     while true do
         task.wait(5)
         if not isCurrentSession() then break end
         if State.AutoClaimOnline then
-            local okList, list = pcall(CfgFind.GetOnlineAwardList)
-            if okList and type(list) == "table" then
-                local onlineBox = PlayerData.GetPlrDataByKey(LocalPlayer, "OnlineBox")
-                for _, award in ipairs(list) do
-                    local claimable = true
-                    if onlineBox then
-                        local okCheck, res = pcall(CfgFind.IsOnlineTierClaimable, onlineBox, award)
-                        if okCheck then claimable = res end
-                    end
-                    if claimable then
-                        pcall(function()
-                            NetWork.InvokeServer(NetMsg.CLAIM_ONLINE_AWARD, award.id)
-                        end)
-                    end
-                end
-            end
+            claimOnlineRewards(false)
         end
     end
 end)
@@ -713,6 +743,15 @@ LootTab:CreateToggle({
     CurrentValue = false,
     Flag = "AutoClaimOnline",
     Callback = function(v) State.AutoClaimOnline = v end,
+})
+
+LootTab:CreateButton({
+    Name = "Claim Now (ทดลองเคลมทันที)",
+    Callback = function()
+        debugLog("Claim Now pressed")
+        local n = claimOnlineRewards(true)
+        debugLog("Claim Now done, claimed " .. tostring(n) .. " tiers")
+    end,
 })
 
 --============================================================
